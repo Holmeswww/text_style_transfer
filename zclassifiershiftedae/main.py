@@ -42,11 +42,15 @@ from __future__ import print_function
 # pylint: disable=invalid-name, too-many-locals, too-many-arguments, no-member
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+
 import importlib
 import numpy as np
 import tensorflow as tf
-import texar as tx
+import texar.tf as tx
 from sklearn.manifold import TSNE
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 from ctrl_gen_model import CtrlGenModel
@@ -58,6 +62,7 @@ flags.DEFINE_string('config', 'config', 'The config to use.')
 FLAGS = flags.FLAGS
 
 config = importlib.import_module(FLAGS.config)
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 def _main(_):
     # Data
@@ -99,18 +104,19 @@ def _main(_):
         while True:
             try:
                 step += 1
-                feed_dict = {
-                    iterator.handle: iterator.get_handle(sess, 'train_d'),
-                    gamma: gamma_,
-                    lambda_g: lambda_g_,
-                    lambda_z: lambda_z_,
-                    lambda_z1: lambda_z1_,
-                    lambda_z2: lambda_z2_,
-                    lambda_ae: lambda_ae_
-                }
+                for i in range(config.diter):
+                    feed_dict = {
+                        iterator.handle: iterator.get_handle(sess, 'train_d'),
+                        gamma: gamma_,
+                        lambda_g: lambda_g_,
+                        lambda_z: lambda_z_,
+                        lambda_z1: lambda_z1_,
+                        lambda_z2: lambda_z2_,
+                        lambda_ae: lambda_ae_
+                    }
 
-                vals_d = sess.run(model.fetches_train_d, feed_dict=feed_dict)
-                avg_meters_d.add(vals_d)
+                    vals_d = sess.run(model.fetches_train_d, feed_dict=feed_dict)
+                    avg_meters_d.add(vals_d)
 
                 feed_dict = {
                     iterator.handle: iterator.get_handle(sess, 'train_g'),
@@ -292,8 +298,10 @@ def _main(_):
     tf.gfile.MakeDirs(config.sample_path)
     tf.gfile.MakeDirs(config.checkpoint_path)
 
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
     # Runs the logics
-    with tf.Session() as sess:
+    with tf.Session(config = tf_config) as sess:
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
         sess.run(tf.tables_initializer())

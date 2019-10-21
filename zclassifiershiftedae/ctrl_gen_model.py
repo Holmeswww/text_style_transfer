@@ -30,20 +30,25 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-import texar as tx
-from texar.modules import WordEmbedder, UnidirectionalRNNEncoder, \
+import texar.tf as tx
+from texar.tf.modules import WordEmbedder, UnidirectionalRNNEncoder, \
         MLPTransformConnector, AttentionRNNDecoder, \
         GumbelSoftmaxEmbeddingHelper, Conv1DClassifier
-from texar.core import get_train_op
-from texar.utils import collect_trainable_variables, get_batch_size
+from texar.tf.core import get_train_op
+from texar.tf.utils import collect_trainable_variables, get_batch_size
 
+
+def dynamic_padding(inp, format):
+
+    pad_size = tf.shape(format)[1] - tf.shape(inp)[1]
+    paddings = [[0, 0], [0, pad_size], [0, 0]] # assign here, during graph execution
+    return tf.pad(inp, paddings, constant_values=0)
 
 class CtrlGenModel(object):
 
     def __init__(self, inputs, vocab, gamma, lambda_g, lambda_z, lambda_z1, lambda_z2, lambda_ae, hparams=None):
         self._hparams = tx.HParams(hparams, None)
         self._build_model(inputs, vocab, gamma, lambda_g, lambda_z, lambda_z1, lambda_z2, lambda_ae)
-
 
     def _build_model(self, inputs, vocab, gamma, lambda_g, lambda_z, lambda_z1, lambda_z2, lambda_ae):
 
@@ -155,36 +160,75 @@ class CtrlGenModel(object):
         # Creates classifier
 
         classifier = Conv1DClassifier(hparams=self._hparams.classifier)
+        discriminator = Conv1DClassifier(hparams=self._hparams.classifier)
 
         clas_embedder = WordEmbedder(vocab_size=vocab.size,
                                      hparams=self._hparams.embedder)
 
         # Classification loss for the classifier
-
-        clas_logits, clas_preds = classifier(
-            inputs=clas_embedder(ids=inputs['text_ids'][:, 1:]),
+        true_samples = clas_embedder(ids=inputs['text_ids'][:, 1:])
+        clas_logits, clas_preds = discriminator(
+            inputs=true_samples,
             sequence_length=inputs['length']-1)
 
-        loss_d_clas = tf.nn.sigmoid_cross_entropy_with_logits(
-            labels=tf.to_float(inputs['labels']), logits=clas_logits)
+        if self._hparams.WGAN:
+            loss_d_clas = tf.reduce_mean(clas_logits * tf.to_float(1 - 2*inputs['labels']))
+            # Classification loss for the generator, based on soft samples
+            fake_samples = clas_embedder(soft_ids=soft_outputs_.sample_id)
+            soft_logits, soft_preds = discriminator(
+                inputs=fake_samples,
+                sequence_length=soft_length_)
+            loss_d_clas = loss_d_clas + tf.reduce_mean(soft_logits * tf.to_float(2*inputs['labels'] - 1)) # tf.reduce_mean(loss_g_clas)
 
-        loss_d_clas = tf.reduce_mean(loss_d_clas)
+        else:
+            loss_d_clas = tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.to_float(inputs['labels']), logits=clas_logits)
 
+            loss_d_clas = tf.reduce_mean(loss_d_clas)
+
+        clas_logits, clas_preds = classifier(
+            inputs=true_samples,
+            sequence_length=inputs['length']-1)
+        loss_clas = tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.to_float(inputs['labels']), logits=clas_logits)
+
+        loss_clas = tf.reduce_mean(loss_clas)
         accu_d = tx.evals.accuracy(labels=inputs['labels'], preds=clas_preds)
 
         # Classification loss for the generator, based on soft samples
-
-        soft_logits, soft_preds = classifier(
-            inputs=clas_embedder(soft_ids=soft_outputs_.sample_id),
+        fake_samples = clas_embedder(soft_ids=soft_outputs_.sample_id)
+        soft_logits, soft_preds = discriminator(
+            inputs=fake_samples,
             sequence_length=soft_length_)
+        if self._hparams.WGAN:
+            loss_g_clas = tf.reduce_mean(soft_logits * tf.to_float(2*inputs['labels'] - 1)) # tf.reduce_mean(loss_g_clas)
+        else:
+            loss_g_clas = tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.to_float(1-inputs['labels']), logits=soft_logits)
 
-        loss_g_clas = tf.nn.sigmoid_cross_entropy_with_logits(
-            labels=tf.to_float(1-inputs['labels']), logits=soft_logits)
+            loss_g_clas = tf.reduce_mean(loss_g_clas)
 
-        loss_g_clas = tf.reduce_mean(loss_g_clas)
+        if self._hparams.WGAN:
+            # WGAN-GP loss
+            alpha = tf.random_uniform(shape=[get_batch_size(inputs['text_ids']), 1, 1], minval=0., maxval=1.)
+            true_samples = tf.cond(tf.less(tf.shape(fake_samples)[1], tf.shape(true_samples)[1]), true_fn=lambda: true_samples, false_fn=lambda: dynamic_padding(true_samples, fake_samples))
+            fake_samples = tf.cond(tf.less(tf.shape(fake_samples)[1], tf.shape(true_samples)[1]), true_fn=lambda: dynamic_padding(fake_samples, true_samples), false_fn=lambda: fake_samples)
+            differences = fake_samples - true_samples  # fake_samples[:,:16] - true_samples[:,:16]
+            interpolates = true_samples + (alpha * differences)
+            # D(interpolates, is_reuse=True)
+            soft_logits, _ = discriminator(
+                inputs=interpolates,
+                sequence_length=inputs['length']-1)
+            gradients = tf.gradients(soft_logits, [interpolates])[0]
+            slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2]))
+            gradient_penalty = self._hparams.LAMBDA * tf.reduce_mean((slopes-1.)**2)
+        else:
+            gradient_penalty = tf.constant(0., tf.float32)
 
         # Accuracy on soft samples, for training progress monitoring
-
+        soft_logits, soft_preds = classifier(
+            inputs=fake_samples,
+            sequence_length=soft_length_)
         accu_g = tx.evals.accuracy(labels=1-inputs['labels'], preds=soft_preds)
 
         # Accuracy on greedy-decoded samples, for training progress monitoring
@@ -202,22 +246,29 @@ class CtrlGenModel(object):
                  lambda_g * loss_g_clas + \
                  lambda_z1 * cos_distance_z + cos_distance_z_ * lambda_z2 \
                  - lambda_z * loss_z_clas
-        loss_d = loss_d_clas
+        loss_d = loss_d_clas + gradient_penalty
         loss_z = loss_z_clas
 
         # Creates optimizers
 
         g_vars = collect_trainable_variables(
             [embedder, encoder, label_connector, connector, decoder])
-        d_vars = collect_trainable_variables([clas_embedder, classifier])
+        d_vars = collect_trainable_variables([clas_embedder, discriminator])
+        clas_vars = collect_trainable_variables([clas_embedder, classifier])
         z_vars = collect_trainable_variables([z_classifier_l1, z_classifier_l2, z_classifier_out])
 
         train_op_g = get_train_op(
             loss_g, g_vars, hparams=self._hparams.opt)
         train_op_g_ae = get_train_op(
             loss_g_ae, g_vars, hparams=self._hparams.opt)
-        train_op_d = get_train_op(
-            loss_d, d_vars, hparams=self._hparams.opt)
+        if self._hparams.WGAN:
+            train_op_d = get_train_op(
+                loss_d, d_vars, hparams=self._hparams.opt_d)
+        else:
+            train_op_d = get_train_op(
+                loss_d, d_vars, hparams=self._hparams.opt)
+        train_op_c = get_train_op(
+            loss_clas, d_vars, hparams=self._hparams.opt)
         train_op_z = get_train_op(
             loss_z, z_vars, hparams=self._hparams.opt
         )
@@ -228,6 +279,8 @@ class CtrlGenModel(object):
             "loss_g_ae": loss_g_ae,
             "loss_g_clas": loss_g_clas,
             "loss_d": loss_d_clas,
+            "loss_clas": loss_clas,
+            "loss_gp": gradient_penalty,
             "loss_z_clas": loss_z_clas,
             "loss_cos_": cos_distance_z_,
             "loss_cos": cos_distance_z
@@ -242,7 +295,8 @@ class CtrlGenModel(object):
             "train_op_g": train_op_g,
             "train_op_g_ae": train_op_g_ae,
             "train_op_d": train_op_d,
-            "train_op_z": train_op_z
+            "train_op_z": train_op_z,
+            "train_op_c": train_op_c
         }
         self.samples = {
             "original": inputs['text_ids'][:, 1:],
@@ -271,6 +325,8 @@ class CtrlGenModel(object):
 
         self.fetches_train_d = {
             "loss_d": self.train_ops["train_op_d"],
+            "loss_c": self.train_ops["train_op_c"],
+            "loss_gp": self.losses["loss_gp"],
             "accu_d": self.metrics["accu_d"]
         }
         fetches_eval = {"batch_size": get_batch_size(inputs['text_ids'])}

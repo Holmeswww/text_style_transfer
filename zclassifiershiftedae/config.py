@@ -58,6 +58,7 @@ write_text = True
 write_labels = True
 
 manual = True
+diter = 1
 
 train_data = {
     'batch_size': 64,
@@ -139,11 +140,23 @@ model = {
         'num_dense_layers': 0,
         'num_classes': 1
     },
+    'LAMBDA': 10.,
+    'WGAN': True,
     'opt': {
         'optimizer': {
             'type':  'AdamOptimizer',
             'kwargs': {
                 'learning_rate': 5e-4,
+            },
+        },
+    },
+    'opt_d': {
+        'optimizer': {
+            'type':  'AdamOptimizer',
+            'kwargs': {
+                'learning_rate': 5e-4,
+                'beta1': 0.5,
+                'beta2': 0.9,
             },
         },
     },
