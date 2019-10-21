@@ -178,7 +178,7 @@ class CtrlGenModel(object):
             soft_logits, soft_preds = discriminator(
                 inputs=fake_samples,
                 sequence_length=soft_length_)
-            loss_d_clas = loss_d_clas + tf.reduce_mean(soft_logits * tf.to_float(2*inputs['labels'] - 1)) # tf.reduce_mean(loss_g_clas)
+            loss_d_clas = loss_d_clas + tf.reduce_mean(soft_logits * tf.to_float(1 - 2*inputs['labels'])) # tf.reduce_mean(loss_g_clas)
 
         else:
             loss_d_clas = tf.nn.sigmoid_cross_entropy_with_logits(
