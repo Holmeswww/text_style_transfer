@@ -29,7 +29,7 @@ from __future__ import print_function
 
 import copy
 
-max_nepochs = 15 # Total number of training epochs
+max_nepochs = 30 # Total number of training epochs
                  # (including pre-train and full-train)
 pretrain_ae_nepochs = 10 # Number of pre-train epochs (training as autoencoder)
 display = 500  # Display the training results every N training steps.
@@ -39,7 +39,7 @@ sample_path = './samples'
 checkpoint_path = './checkpoints'
 restore = ''   # Model snapshot to restore from
 
-lambda_g = 0.1    # Weight of the classification loss
+lambda_g = 0.0005    # Weight of the classification loss
 lambda_z = 0.5
 lambda_z1 = 3000.
 lambda_z2 = 3000.
@@ -58,7 +58,7 @@ write_text = True
 write_labels = True
 
 manual = True
-diter = 1
+diter = 5
 
 train_data = {
     'batch_size': 64,
@@ -140,7 +140,16 @@ model = {
         'num_dense_layers': 0,
         'num_classes': 1
     },
-    'LAMBDA': 10.,
+    'classifier1': {
+        'kernel_size': [3, 4, 5],
+        'filters': 256,
+        'other_conv_kwargs': {'padding': 'same'},
+        'dropout_conv': [1],
+        'dropout_rate': 0.5,
+        'num_dense_layers': 1,
+        'num_classes': 1
+    },
+    'LAMBDA': 40.,
     'WGAN': True,
     'opt': {
         'optimizer': {

@@ -159,7 +159,7 @@ class CtrlGenModel(object):
 
         # Creates classifier
 
-        classifier = Conv1DClassifier(hparams=self._hparams.classifier)
+        classifier = Conv1DClassifier(hparams=self._hparams.classifier1) #Conv1DClassifier(hparams=self._hparams.classifier)
         discriminator = Conv1DClassifier(hparams=self._hparams.classifier)
 
         clas_embedder = WordEmbedder(vocab_size=vocab.size,
