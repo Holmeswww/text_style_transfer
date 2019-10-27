@@ -159,8 +159,8 @@ class CtrlGenModel(object):
 
         # Creates classifier
 
-        classifier = Conv1DClassifier(hparams=self._hparams.classifier1) #Conv1DClassifier(hparams=self._hparams.classifier)
-        discriminator = Conv1DClassifier(hparams=self._hparams.classifier)
+        classifier = Conv1DClassifier(hparams=self._hparams.classifier) #Conv1DClassifier(hparams=self._hparams.classifier)
+        discriminator = Conv1DClassifier(hparams=self._hparams.discriminator)
 
         clas_embedder = WordEmbedder(vocab_size=vocab.size,
                                      hparams=self._hparams.embedder)
@@ -170,21 +170,33 @@ class CtrlGenModel(object):
         clas_logits, clas_preds = discriminator(
             inputs=true_samples,
             sequence_length=inputs['length']-1)
-
+        # print(clas_logits.shape)
+        clas_logits, d_logits = tf.split(clas_logits,2,1)
+        clas_logits = tf.squeeze(clas_logits)
+        d_logits = tf.squeeze(d_logits)
         if self._hparams.WGAN:
-            loss_d_clas = tf.reduce_mean(clas_logits * tf.to_float(1 - 2*inputs['labels']))
+            loss_d_dis = -tf.reduce_mean(d_logits)
             # Classification loss for the generator, based on soft samples
             fake_samples = clas_embedder(soft_ids=soft_outputs_.sample_id)
+            loss_d_clas = tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.to_float(inputs['labels']), logits=clas_logits)
             soft_logits, soft_preds = discriminator(
                 inputs=fake_samples,
                 sequence_length=soft_length_)
-            loss_d_clas = loss_d_clas + tf.reduce_mean(soft_logits * tf.to_float(1 - 2*inputs['labels'])) # tf.reduce_mean(loss_g_clas)
+            clas_logits, d_logits = tf.split(soft_logits,2,1)
+            clas_logits = tf.squeeze(clas_logits)
+            d_logits = tf.squeeze(d_logits)
+            loss_d_dis = loss_d_dis + tf.reduce_mean(d_logits) # tf.reduce_mean(loss_g_clas)
+            loss_d_clas = loss_d_clas + tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.to_float(1-inputs['labels']), logits=clas_logits)
 
+            loss_d_clas = tf.reduce_mean(loss_d_clas)
         else:
             loss_d_clas = tf.nn.sigmoid_cross_entropy_with_logits(
                 labels=tf.to_float(inputs['labels']), logits=clas_logits)
 
             loss_d_clas = tf.reduce_mean(loss_d_clas)
+            loss_d_dis = tf.constant(0., tf.float32)
 
         clas_logits, clas_preds = classifier(
             inputs=true_samples,
@@ -200,13 +212,21 @@ class CtrlGenModel(object):
         soft_logits, soft_preds = discriminator(
             inputs=fake_samples,
             sequence_length=soft_length_)
+        
+        soft_logits, d_logits = tf.split(soft_logits,2,1)
+        soft_logits = tf.squeeze(soft_logits)
+        d_logits = tf.squeeze(d_logits)
         if self._hparams.WGAN:
-            loss_g_clas = tf.reduce_mean(soft_logits * tf.to_float(2*inputs['labels'] - 1)) # tf.reduce_mean(loss_g_clas)
+            loss_g_clas = tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.to_float(1-inputs['labels']), logits=soft_logits)
+            loss_g_clas = tf.reduce_mean(loss_g_clas) # tf.reduce_mean(loss_g_clas)
+            loss_g_dis = -tf.reduce_mean(d_logits)
         else:
             loss_g_clas = tf.nn.sigmoid_cross_entropy_with_logits(
                 labels=tf.to_float(1-inputs['labels']), logits=soft_logits)
 
             loss_g_clas = tf.reduce_mean(loss_g_clas)
+            loss_g_dis = tf.constant(0., tf.float32)
 
         if self._hparams.WGAN:
             # WGAN-GP loss
@@ -219,7 +239,9 @@ class CtrlGenModel(object):
             soft_logits, _ = discriminator(
                 inputs=interpolates,
                 sequence_length=inputs['length']-1)
-            gradients = tf.gradients(soft_logits, [interpolates])[0]
+            _, d_logits = tf.split(soft_logits,2,1)
+            d_logits = tf.squeeze(d_logits)
+            gradients = tf.gradients(d_logits, [interpolates])[0]
             slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients), reduction_indices=[1, 2]))
             gradient_penalty = self._hparams.LAMBDA * tf.reduce_mean((slopes-1.)**2)
         else:
@@ -243,10 +265,10 @@ class CtrlGenModel(object):
         # Aggregates losses
 
         loss_g = lambda_ae * loss_g_ae + \
-                 lambda_g * loss_g_clas + \
+                 lambda_g * (loss_g_clas + self._hparams.ACGAN_SCALE_G*loss_g_dis) + \
                  lambda_z1 * cos_distance_z + cos_distance_z_ * lambda_z2 \
                  - lambda_z * loss_z_clas
-        loss_d = loss_d_clas + gradient_penalty
+        loss_d = loss_d_clas + self._hparams.ACGAN_SCALE_D*loss_d_dis + gradient_penalty
         loss_z = loss_z_clas
 
         # Creates optimizers

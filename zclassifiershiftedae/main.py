@@ -95,7 +95,7 @@ def _main(_):
     lambda_ae = tf.placeholder(dtype=tf.float32, shape=[], name='lambda_ae')
     model = CtrlGenModel(batch, vocab, gamma, lambda_g, lambda_z, lambda_z1, lambda_z2, lambda_ae, config.model)
 
-    def _train_epoch(sess, gamma_, lambda_g_, lambda_z_, lambda_z1_, lambda_z2_, lambda_ae_, epoch, verbose=True):
+    def _train_epoch(sess, diter, gamma_, lambda_g_, lambda_z_, lambda_z1_, lambda_z2_, lambda_ae_, epoch, verbose=True):
         avg_meters_d = tx.utils.AverageRecorder(size=10)
         avg_meters_g = tx.utils.AverageRecorder(size=10)
         avg_meters_z = tx.utils.AverageRecorder(size=10)
@@ -104,7 +104,7 @@ def _main(_):
         while True:
             try:
                 step += 1
-                for i in range(config.diter):
+                for i in range(diter):
                     feed_dict = {
                         iterator.handle: iterator.get_handle(sess, 'train_d'),
                         gamma: gamma_,
@@ -314,6 +314,7 @@ def _main(_):
         iterator.initialize_dataset(sess)
 
         gamma_ = 1.
+        diter = 1
         lambda_g_ = 0.
         lambda_z_ = 0.
         lambda_ae_ = 1.
@@ -325,6 +326,7 @@ def _main(_):
                 gamma_ = max(0.001, gamma_ * config.gamma_decay)
                 lambda_g_ = config.lambda_g
                 lambda_z_ = config.lambda_z
+                diter = config.diter
             if epoch > config.chage_lambda_ae_epoch:
                 lambda_ae_ = lambda_ae_ - config.change_lambda_ae
             print('gamma: {}, lambda_g: {}, lambda_z: {}, lambda_z1: {}, lambda_z2: {}, lambda_ae: {}'.format(
@@ -332,7 +334,7 @@ def _main(_):
 
             # Train
             iterator.restart_dataset(sess, ['train_g', 'train_d', 'train_z'])
-            _train_epoch(sess, gamma_, lambda_g_, lambda_z_, lambda_z1_, lambda_z2_, lambda_ae_, epoch)
+            _train_epoch(sess, diter, gamma_, lambda_g_, lambda_z_, lambda_z1_, lambda_z2_, lambda_ae_, epoch)
 
             # Val
             iterator.restart_dataset(sess, 'val')

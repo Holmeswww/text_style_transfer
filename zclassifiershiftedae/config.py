@@ -131,16 +131,16 @@ model = {
         'max_decoding_length_train': 21,
         'max_decoding_length_infer': 20,
     },
-    'classifier': {
+    'discriminator': {
         'kernel_size': [3, 4, 5],
         'filters': 128,
         'other_conv_kwargs': {'padding': 'same'},
         'dropout_conv': [1],
         'dropout_rate': 0.5,
         'num_dense_layers': 0,
-        'num_classes': 1
+        'num_classes': 2
     },
-    'classifier1': {
+    'classifier': {
         'kernel_size': [3, 4, 5],
         'filters': 256,
         'other_conv_kwargs': {'padding': 'same'},
@@ -149,7 +149,9 @@ model = {
         'num_dense_layers': 1,
         'num_classes': 1
     },
-    'LAMBDA': 40.,
+    'LAMBDA': 10.,
+    'ACGAN_SCALE_D': 1.,
+    'ACGAN_SCALE_G': 0.1,
     'WGAN': True,
     'opt': {
         'optimizer': {
