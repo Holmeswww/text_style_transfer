@@ -149,9 +149,9 @@ model = {
         'num_dense_layers': 1,
         'num_classes': 1
     },
-    'LAMBDA': 10.,
-    'ACGAN_SCALE_D': 1.,
-    'ACGAN_SCALE_G': 0.1,
+    'LAMBDA': 50.,
+    'ACGAN_SCALE_D': 10.,
+    'ACGAN_SCALE_G': 10,
     'WGAN': True,
     'opt': {
         'optimizer': {

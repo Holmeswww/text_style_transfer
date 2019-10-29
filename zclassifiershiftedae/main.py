@@ -327,6 +327,8 @@ def _main(_):
                 lambda_g_ = config.lambda_g
                 lambda_z_ = config.lambda_z
                 diter = config.diter
+                saver.save(
+                    sess, os.path.join(config.checkpoint_path, 'pretrain'), epoch)
             if epoch > config.chage_lambda_ae_epoch:
                 lambda_ae_ = lambda_ae_ - config.change_lambda_ae
             print('gamma: {}, lambda_g: {}, lambda_z: {}, lambda_z1: {}, lambda_z2: {}, lambda_ae: {}'.format(
