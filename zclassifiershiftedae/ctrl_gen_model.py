@@ -189,7 +189,7 @@ class CtrlGenModel(object):
             clas_logits = tf.squeeze(clas_logits)
             d_logits = tf.squeeze(d_logits)
             loss_d_dis = loss_d_dis + tf.reduce_mean(d_logits) # tf.reduce_mean(loss_g_clas)
-            loss_d_clas = loss_d_clas + tf.nn.sigmoid_cross_entropy_with_logits(
+            loss_d_clas = loss_d_clas + lambda_g * tf.nn.sigmoid_cross_entropy_with_logits(
                 labels=tf.to_float(1-inputs['labels']), logits=clas_logits)
             accu_d_f = tx.evals.accuracy(labels=1-inputs['labels'], preds=(clas_logits>=0.5))
 
