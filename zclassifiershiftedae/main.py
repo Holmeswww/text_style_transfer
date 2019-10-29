@@ -312,7 +312,6 @@ def _main(_):
             saver.restore(sess, config.restore)
 
         iterator.initialize_dataset(sess)
-
         gamma_ = 1.
         diter = 1
         lambda_g_ = 0.

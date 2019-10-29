@@ -175,11 +175,13 @@ class CtrlGenModel(object):
         clas_logits = tf.squeeze(clas_logits)
         d_logits = tf.squeeze(d_logits)
         if self._hparams.WGAN:
+            loss_d_clas = tf.nn.sigmoid_cross_entropy_with_logits(
+                labels=tf.to_float(inputs['labels']), logits=clas_logits)
+            accu_d_r = tx.evals.accuracy(labels=inputs['labels'], preds=(clas_logits>=0.5))
+
             loss_d_dis = -tf.reduce_mean(d_logits)
             # Classification loss for the generator, based on soft samples
             fake_samples = clas_embedder(soft_ids=soft_outputs_.sample_id)
-            loss_d_clas = tf.nn.sigmoid_cross_entropy_with_logits(
-                labels=tf.to_float(inputs['labels']), logits=clas_logits)
             soft_logits, soft_preds = discriminator(
                 inputs=fake_samples,
                 sequence_length=soft_length_)
@@ -189,6 +191,7 @@ class CtrlGenModel(object):
             loss_d_dis = loss_d_dis + tf.reduce_mean(d_logits) # tf.reduce_mean(loss_g_clas)
             loss_d_clas = loss_d_clas + tf.nn.sigmoid_cross_entropy_with_logits(
                 labels=tf.to_float(1-inputs['labels']), logits=clas_logits)
+            accu_d_f = tx.evals.accuracy(labels=1-inputs['labels'], preds=(clas_logits>=0.5))
 
             loss_d_clas = tf.reduce_mean(loss_d_clas)
         else:
@@ -205,7 +208,7 @@ class CtrlGenModel(object):
                 labels=tf.to_float(inputs['labels']), logits=clas_logits)
 
         loss_clas = tf.reduce_mean(loss_clas)
-        accu_d = tx.evals.accuracy(labels=inputs['labels'], preds=clas_preds)
+        accu_clas = tx.evals.accuracy(labels=inputs['labels'], preds=clas_preds)
 
         # Classification loss for the generator, based on soft samples
         fake_samples = clas_embedder(soft_ids=soft_outputs_.sample_id)
@@ -265,10 +268,11 @@ class CtrlGenModel(object):
         # Aggregates losses
 
         loss_g = lambda_ae * loss_g_ae + \
-                 lambda_g * (loss_g_clas + self._hparams.ACGAN_SCALE_G*loss_g_dis) + \
+                 lambda_g * (self._hparams.ACGAN_SCALE_G*loss_g_clas + loss_g_dis) + \
                  lambda_z1 * cos_distance_z + cos_distance_z_ * lambda_z2 \
                  - lambda_z * loss_z_clas
-        loss_d = loss_d_clas + self._hparams.ACGAN_SCALE_D*loss_d_dis + gradient_penalty
+        loss_d = self._hparams.ACGAN_SCALE_D*loss_d_clas + loss_d_dis + gradient_penalty
+        print("ACSCALE: {}".format(self._hparams.ACGAN_SCALE_D))
         loss_z = loss_z_clas
 
         # Creates optimizers
@@ -300,7 +304,9 @@ class CtrlGenModel(object):
             "loss_g": loss_g,
             "loss_g_ae": loss_g_ae,
             "loss_g_clas": loss_g_clas,
-            "loss_d": loss_d_clas,
+            "loss_d": loss_d,
+            "loss_d_clas": loss_d_clas,
+            "loss_d_dis": loss_d_dis,
             "loss_clas": loss_clas,
             "loss_gp": gradient_penalty,
             "loss_z_clas": loss_z_clas,
@@ -308,7 +314,9 @@ class CtrlGenModel(object):
             "loss_cos": cos_distance_z
         }
         self.metrics = {
-            "accu_d": accu_d,
+            "accu_d_r": accu_d_r,
+            "accu_d_f": accu_d_f,
+            "accu_clas": accu_clas,
             "accu_g": accu_g,
             "accu_g_gdy": accu_g_gdy,
             "accu_z_clas": accu_z_clas
@@ -347,9 +355,13 @@ class CtrlGenModel(object):
 
         self.fetches_train_d = {
             "loss_d": self.train_ops["train_op_d"],
+            "loss_d_clas": self.losses["loss_d_clas"],
+            "loss_d_dis": self.losses["loss_d_dis"],
             "loss_c": self.train_ops["train_op_c"],
             "loss_gp": self.losses["loss_gp"],
-            "accu_d": self.metrics["accu_d"]
+            "accu_d_r": self.metrics["accu_d_r"],
+            "accu_d_f": self.metrics["accu_d_f"],
+            "accu_clas": self.metrics["accu_clas"]
         }
         fetches_eval = {"batch_size": get_batch_size(inputs['text_ids'])}
         fetches_eval.update(self.losses)

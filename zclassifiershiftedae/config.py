@@ -57,7 +57,8 @@ repetitions = True
 write_text = True
 write_labels = True
 
-manual = True
+manual = False
+# restore = 'checkpoints/pretrain-11'
 diter = 5
 
 train_data = {
@@ -149,9 +150,9 @@ model = {
         'num_dense_layers': 1,
         'num_classes': 1
     },
-    'LAMBDA': 50.,
-    'ACGAN_SCALE_D': 10.,
-    'ACGAN_SCALE_G': 10,
+    'LAMBDA': 10.,
+    'ACGAN_SCALE_D': 1000.,
+    'ACGAN_SCALE_G': 1000.,
     'WGAN': True,
     'opt': {
         'optimizer': {
