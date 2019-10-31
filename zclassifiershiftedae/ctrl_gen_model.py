@@ -272,7 +272,7 @@ class CtrlGenModel(object):
                  lambda_z1 * cos_distance_z + cos_distance_z_ * lambda_z2 \
                  - lambda_z * loss_z_clas
         loss_d = self._hparams.ACGAN_SCALE_D*loss_d_clas + loss_d_dis + gradient_penalty
-        print("ACSCALE: {}".format(self._hparams.ACGAN_SCALE_D))
+        print("\n==========ACSCALE  D:{}, G:{}=========\n".format(self._hparams.ACGAN_SCALE_D,self._hparams.ACGAN_SCALE_G))
         loss_z = loss_z_clas
 
         # Creates optimizers
@@ -304,6 +304,7 @@ class CtrlGenModel(object):
             "loss_g": loss_g,
             "loss_g_ae": loss_g_ae,
             "loss_g_clas": loss_g_clas,
+            "loss_g_dis": loss_g_dis,
             "loss_d": loss_d,
             "loss_d_clas": loss_d_clas,
             "loss_d_dis": loss_d_dis,
@@ -341,6 +342,7 @@ class CtrlGenModel(object):
             "loss_g": self.train_ops["train_op_g"],
             "loss_g_ae": self.losses["loss_g_ae"],
             "loss_g_clas": self.losses["loss_g_clas"],
+            "loss_g_dis": self.losses["loss_g_dis"],
             "loss_shifted_ae1": self.losses["loss_cos"],
             "loss_shifted_ae2": self.losses["loss_cos_"],
             "accu_g": self.metrics["accu_g"],

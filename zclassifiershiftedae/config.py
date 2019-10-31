@@ -31,7 +31,7 @@ import copy
 
 max_nepochs = 30 # Total number of training epochs
                  # (including pre-train and full-train)
-pretrain_ae_nepochs = 10 # Number of pre-train epochs (training as autoencoder)
+pretrain_ae_nepochs = 7 # Number of pre-train epochs (training as autoencoder)
 display = 500  # Display the training results every N training steps.
 display_eval = 1e10 # Display the dev results every N training steps (set to a
                     # very large value to disable it).
@@ -151,8 +151,8 @@ model = {
         'num_classes': 1
     },
     'LAMBDA': 10.,
-    'ACGAN_SCALE_D': 1000.,
-    'ACGAN_SCALE_G': 1000.,
+    'ACGAN_SCALE_D': 10.,
+    'ACGAN_SCALE_G': 500.,
     'WGAN': True,
     'opt': {
         'optimizer': {
