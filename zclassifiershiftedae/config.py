@@ -39,10 +39,10 @@ sample_path = './samples'
 checkpoint_path = './checkpoints'
 restore = ''   # Model snapshot to restore from
 
-lambda_g = 0.0005    # Weight of the classification loss
+lambda_g = 0.001    # Weight of the classification loss
 lambda_z = 0.5
-lambda_z1 = 3000.
-lambda_z2 = 3000.
+lambda_z1 = 0 #3000.
+lambda_z2 = 0 #3000.
 gamma_decay = 0.5   # Gumbel-softmax temperature anneal rate
 
 change_lambda_ae = 0.
@@ -150,10 +150,11 @@ model = {
         'num_dense_layers': 1,
         'num_classes': 1
     },
-    'LAMBDA': 10.,
+    'LAMBDA': 5., 
     'ACGAN_SCALE_D': 10.,
-    'ACGAN_SCALE_G': 500.,
+    'ACGAN_SCALE_G': 100.,
     'WGAN': True,
+    'WWGAN': False,
     'opt': {
         'optimizer': {
             'type':  'AdamOptimizer',

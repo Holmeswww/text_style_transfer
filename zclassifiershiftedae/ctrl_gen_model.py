@@ -119,6 +119,8 @@ class CtrlGenModel(object):
             sequence_length=inputs['length']-1,
             average_across_timesteps=True,
             sum_over_timesteps=False)
+        
+        ppl = tf.exp(loss_g_ae)
 
         # Gumbel-softmax decoding, used in training
 
@@ -182,13 +184,20 @@ class CtrlGenModel(object):
             loss_d_dis = -tf.reduce_mean(d_logits)
             # Classification loss for the generator, based on soft samples
             fake_samples = clas_embedder(soft_ids=soft_outputs_.sample_id)
-            soft_logits, soft_preds = discriminator(
+            soft_logits, _ = discriminator(
                 inputs=fake_samples,
                 sequence_length=soft_length_)
             clas_logits, d_logits = tf.split(soft_logits,2,1)
             clas_logits = tf.squeeze(clas_logits)
             d_logits = tf.squeeze(d_logits)
-            loss_d_dis = loss_d_dis + tf.reduce_mean(d_logits) # tf.reduce_mean(loss_g_clas)
+            d_logits = d_logits - tf.reduce_max(d_logits, axis = 0, keepdims = True)
+            if self._hparams.WWGAN:
+                # W = tf.math.softmax(d_logits, axis = 0)
+                W = tf.exp(d_logits) / tf.reduce_sum(tf.exp(d_logits), 0)
+                W = tf.stop_gradient(W)
+                loss_d_dis = loss_d_dis + tf.reduce_mean(d_logits*W)
+            else:
+                loss_d_dis = loss_d_dis + tf.reduce_mean(d_logits) # tf.reduce_mean(loss_g_clas)
             loss_d_clas = loss_d_clas + lambda_g * tf.nn.sigmoid_cross_entropy_with_logits(
                 labels=tf.to_float(1-inputs['labels']), logits=clas_logits)
             accu_d_f = tx.evals.accuracy(labels=1-inputs['labels'], preds=(clas_logits>=0.5))
@@ -212,7 +221,7 @@ class CtrlGenModel(object):
 
         # Classification loss for the generator, based on soft samples
         fake_samples = clas_embedder(soft_ids=soft_outputs_.sample_id)
-        soft_logits, soft_preds = discriminator(
+        soft_logits, _ = discriminator(
             inputs=fake_samples,
             sequence_length=soft_length_)
         
@@ -272,7 +281,7 @@ class CtrlGenModel(object):
                  lambda_z1 * cos_distance_z + cos_distance_z_ * lambda_z2 \
                  - lambda_z * loss_z_clas
         loss_d = self._hparams.ACGAN_SCALE_D*loss_d_clas + loss_d_dis + gradient_penalty
-        print("\n==========ACSCALE  D:{}, G:{}=========\n".format(self._hparams.ACGAN_SCALE_D,self._hparams.ACGAN_SCALE_G))
+        print("\n==========LAMBDA: {}, ACSCALE  D:{}, G:{}=========\n".format(self._hparams.LAMBDA,self._hparams.ACGAN_SCALE_D,self._hparams.ACGAN_SCALE_G))
         loss_z = loss_z_clas
 
         # Creates optimizers
@@ -315,6 +324,7 @@ class CtrlGenModel(object):
             "loss_cos": cos_distance_z
         }
         self.metrics = {
+            "ppl": ppl,
             "accu_d_r": accu_d_r,
             "accu_d_f": accu_d_f,
             "accu_clas": accu_clas,
@@ -345,6 +355,7 @@ class CtrlGenModel(object):
             "loss_g_dis": self.losses["loss_g_dis"],
             "loss_shifted_ae1": self.losses["loss_cos"],
             "loss_shifted_ae2": self.losses["loss_cos_"],
+            "ppl": self.metrics["ppl"],
             "accu_g": self.metrics["accu_g"],
             "accu_g_gdy": self.metrics["accu_g_gdy"],
             "accu_z_clas": self.metrics["accu_z_clas"]

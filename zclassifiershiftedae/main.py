@@ -52,6 +52,7 @@ from sklearn.manifold import TSNE
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from torch.utils.tensorboard import SummaryWriter
 
 from ctrl_gen_model import CtrlGenModel
 
@@ -63,6 +64,18 @@ FLAGS = flags.FLAGS
 
 config = importlib.import_module(FLAGS.config)
 tf.logging.set_verbosity(tf.logging.ERROR)
+
+ID = [config.model['WWGAN'], config.lambda_g, config.lambda_z, config.lambda_z1, config.lambda_z2, config.model['LAMBDA'], config.model['ACGAN_SCALE_D'], config.model['ACGAN_SCALE_G']]
+ID = "_".join(map(str, ID))
+
+os.system("rm -rf ./runs/"+ID)
+import time
+time.sleep(5)
+summary_writer = SummaryWriter(log_dir="./runs/"+ID) # tf.summary.FileWriter("./runs/"+ID)
+
+def tb_write(D, step, prefix="value"):
+    for k,v in D.items():
+        summary_writer.add_scalars(k, {prefix:v}, global_step=step)
 
 def _main(_):
     # Data
@@ -156,6 +169,9 @@ def _main(_):
                 print('epoch: {}, {}'.format(epoch, avg_meters_d.to_str(4)))
                 print('epoch: {}, {}'.format(epoch, avg_meters_z.to_str(4)))
                 print('epoch: {}, {}'.format(epoch, avg_meters_g.to_str(4)))
+                tb_write(avg_meters_d.avg(), epoch, "train")
+                tb_write(avg_meters_z.avg(), epoch, "train")
+                tb_write(avg_meters_g.avg(), epoch, "train")
                 break
 
 
@@ -274,6 +290,7 @@ def _main(_):
             except tf.errors.OutOfRangeError:
                 print('epoch: {}, {}: {}'.format(
                     epoch, val_or_test, avg_meters.to_str(precision=4)))
+                tb_write(avg_meters.avg(), epoch, val_or_test)
                 break
 
         if plot_z:
@@ -332,6 +349,7 @@ def _main(_):
                 lambda_ae_ = lambda_ae_ - config.change_lambda_ae
             print('gamma: {}, lambda_g: {}, lambda_z: {}, lambda_z1: {}, lambda_z2: {}, lambda_ae: {}'.format(
                 gamma_, lambda_g_, lambda_z_, lambda_z1_, lambda_z2_, lambda_ae_))
+            tb_write({"params/gamma": gamma_, "params/lambda_g": lambda_g_, "params/lambda_z": lambda_z_, "params/lambda_z1": lambda_z1_, "params/lambda_z2": lambda_z2_, "params/lambda_ae": lambda_ae_}, epoch)
 
             # Train
             iterator.restart_dataset(sess, ['train_g', 'train_d', 'train_z'])
